@@ -82,12 +82,34 @@ export function createRenderer(canvas) {
       context.fillStyle = PALETTE.player;
       context.fillRect(player.x, player.y, player.width, player.height);
     }
+
+    // Police cars: dark body with a red/blue siren that alternates twice a second.
+    for (const car of state.wanted.cars) {
+      if (!car.active) continue;
+      context.fillStyle = PALETTE.police;
+      context.fillRect(car.x, car.y, car.width, car.height);
+      context.fillStyle = Math.floor(car.siren * 2) % 2 === 0 ? PALETTE.sirenRed : PALETTE.sirenBlue;
+      context.fillRect(car.x + 4, car.y - 5, 12, 5);
+      context.fillStyle = Math.floor(car.siren * 2) % 2 === 0 ? PALETTE.sirenBlue : PALETTE.sirenRed;
+      context.fillRect(car.x + car.width - 16, car.y - 5, 12, 5);
+    }
   }
+
+  /** Wanted stars, filled gold up to the current level, as one short string. */
+  const STAR_STRINGS = ['☆☆☆☆☆', '★☆☆☆☆', '★★☆☆☆', '★★★☆☆', '★★★★☆', '★★★★★'];
 
   function drawHud(state) {
     context.textBaseline = 'top';
     text(scoreLabel(state.score), 24, 20, 28, PALETTE.text, 'left');
     text(levelLabel(state.level), FIELD.width / 2, 20, 28, PALETTE.text, 'center');
+    text(
+      STAR_STRINGS[state.wanted.stars],
+      FIELD.width - 24,
+      56,
+      26,
+      state.wanted.stars > 0 ? PALETTE.starGold : PALETTE.muted,
+      'right',
+    );
     const firstLife = FIELD.width - 24 - LIVES * (LIFE_SIZE + LIFE_GAP) + LIFE_GAP;
     text('Lives', firstLife - 12, 20, 28, PALETTE.text, 'right');
     for (let life = 0; life < LIVES; life += 1) {
