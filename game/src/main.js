@@ -2,9 +2,9 @@
 // fixed 1/60 s steps, and the renderer paints what is there. The game moves between
 // four screens: title, play, paused and busted/wasted.
 //
-// ?seed=N fixes the city. ?shot=start|chase|street|mission (with &seed=N) stages that
-// scene instead of running the loop, paints it twice and sets window.__shotReady for
-// a screenshot.
+// ?seed=N fixes the city. ?shot=start|chase|street|mission|night (with &seed=N) stages
+// that scene instead of running the loop, paints it twice and sets window.__shotReady
+// for a screenshot.
 import * as THREE from 'three';
 import { makeRandom, clamp } from './random.js';
 import { createCity } from './city.js';
@@ -22,6 +22,8 @@ import { createCombat, fireWeapon, updateCombat } from './combat.js';
 import { createAudio } from './audio.js';
 import { createHud } from './hud.js';
 import { defaultSave, loadSave, writeSave, clearSave } from './save.js';
+import { createInteriors, updateInteriorDoors, interiorById } from './interiors.js';
+import { setTimeOfDay } from './dusk.js';
 import { stageShot } from './shots.js';
 
 const STEP = 1 / 60;
@@ -57,14 +59,15 @@ sun.shadow.camera.top = 180;
 sun.shadow.camera.bottom = -180;
 sun.shadow.camera.far = 420;
 scene.add(sun);
-scene.add(new THREE.HemisphereLight(0xbcd8ff, 0x8a7a5a, 1.1));
+const hemi = new THREE.HemisphereLight(0xbcd8ff, 0x8a7a5a, 1.1);
+scene.add(hemi);
 
 // --- The world -------------------------------------------------------------
 const random = makeRandom(seed);
 const city = createCity(scene, seed);
 const corners = getCorners();
 const game = {
-  scene, camera, renderer, city, random, corners,
+  scene, camera, renderer, city, random, corners, sun, hemi,
   now: 0,
   phase: 'menu',
   save: loadSave() ?? defaultSave(),
@@ -78,6 +81,13 @@ const game = {
   wanted: null,
   missions: null,
   combat: null,
+  interiors: null,
+  interior: null,
+  returnPos: null,
+  activeColliders: null,
+  roomBounds: null,
+  doorCooldownUntil: 0,
+  timeOfDay: 'day',
   audio: createAudio(),
   hud: createHud(),
   keys: {},
@@ -119,8 +129,52 @@ game.player = createPlayer(scene);
 game.wanted = createWanted();
 game.missions = createMissions(scene);
 game.combat = createCombat(scene);
+game.interiors = createInteriors(scene);
 buildDynamics();
 resetPlayer(game.player, 0, 20);
+
+// --- Interiors -------------------------------------------------------------
+function enterInterior(id) {
+  const room = interiorById(game.interiors, id);
+  if (!room) return;
+  game.returnPos = game.player.pos.clone();
+  game.interior = id;
+  game.player.pos.set(room.def.inside.x, 0, room.def.inside.z);
+  game.player.mesh.position.copy(game.player.pos);
+  game.player.camDistance = 4.5;
+  game.activeColliders = room.colliders;
+  game.roomBounds = room.bounds;
+  game.doorCooldownUntil = game.now + 1.5;
+  game.audio.door();
+  game.hud.feed(room.def.enterText);
+}
+
+function exitInterior() {
+  if (!game.interior) return;
+  const room = interiorById(game.interiors, game.interior);
+  // Land on the room's exit drop, a few metres clear of the portal — landing on
+  // the exact entry point would suck Dana straight back inside once the door
+  // cooldown ends. Fall back to where she entered if a room has no drop point.
+  const drop = room ? room.def.exitDrop : null;
+  if (drop) {
+    game.player.pos.set(drop.x, 0, drop.z);
+    game.player.mesh.position.copy(game.player.pos);
+  } else if (game.returnPos) {
+    game.player.pos.copy(game.returnPos);
+    game.player.mesh.position.copy(game.player.pos);
+  }
+  game.interior = null;
+  game.returnPos = null;
+  game.activeColliders = null;
+  game.roomBounds = null;
+  game.player.camDistance = 7.5;
+  game.doorCooldownUntil = game.now + 1.5;
+  game.audio.door();
+  game.hud.feed('Back on the street.');
+}
+
+game.enterInterior = enterInterior;
+game.exitInterior = exitInterior;
 
 game.onEvent = (stars, reason) => {
   game.hud.feed(reason);
@@ -156,9 +210,17 @@ function resetWorld() {
   buildDynamics();
   clearWanted(game.wanted);
   resetPlayer(game.player, 0, 20);
+  // Out of any interior, back to day: the sun resets with the day.
+  game.interior = null;
+  game.returnPos = null;
+  game.activeColliders = null;
+  game.roomBounds = null;
+  game.doorCooldownUntil = 0;
+  game.player.camDistance = 7.5;
+  setTimeOfDay(game, 'day');
   game.now = 0;
   game.flags.stoleSports = false;
-  game.missions.activeIndex = Math.min(game.save.missionIndex, 2);
+  game.missions.activeIndex = Math.min(game.save.missionIndex, 3);
   game.missions.stepIndex = 0;
   game.missions.started = false;
   game.missions.done = false;
@@ -200,11 +262,16 @@ function playerForward() {
 }
 
 // Starting a job. The Harbor Run (job 3) starts hot: the PD is already out, and
-// every drop raises the heat another star.
+// every drop raises the heat another star. SUNDOWN (job 4) starts hotter still —
+// three stars, at dusk — and every step raises the heat.
 function beginMission(index) {
   const mission = startMission(game.missions, index, game.now);
   if (index === 2) {
     addWanted(game.wanted, 2, 'Marlow wants his money tonight — the PD is already out.', game.now, game.onEvent);
+  }
+  if (index === 3) {
+    setTimeOfDay(game, 'dusk');
+    addWanted(game.wanted, 3, 'Sundown. Marlow’s money, three stars, no excuses.', game.now, game.onEvent);
   }
   return mission;
 }
@@ -229,23 +296,32 @@ function step(dt, keys) {
       game.save.bestCash = Math.max(game.save.bestCash, game.cash);
       game.audio.missionDone();
       game.hud.banner('MISSION COMPLETE', `+$${mission.reward} — ${mission.title}`);
-      if (game.missions.activeIndex < 2) {
+      if (game.missions.activeIndex < 3) {
         game.save.missionIndex = game.missions.activeIndex + 1;
         beginMission(game.save.missionIndex);
       } else {
-        game.save.missionIndex = 2;
+        game.save.missionIndex = 3;
+        game.audio.finale();
         game.hud.banner('ALL JOBS DONE', 'Marlow is paid. Solmar is yours, Dana.');
       }
       writeSave(game.save);
     } else if (missionEvent.startsWith('TIME UP')) {
-      game.hud.banner('JOB FAILED', 'Out of time on the Harbor Run.');
+      game.hud.banner('JOB FAILED', 'Out of time. Ilsa is not happy. Try again.');
     } else {
       game.audio.pickup();
-      // Every Harbor Run drop raises the heat a star.
-      if (game.missions.activeIndex === 2) {
+      // Every Harbor Run and SUNDOWN drop raises the heat a star.
+      if (game.missions.activeIndex >= 2) {
         addWanted(game.wanted, 1, 'The heat rises with every drop.', game.now, game.onEvent);
       }
     }
+  }
+  // Doorways run AFTER the mission check on purpose: a step that ends at a door
+  // (SUNDOWN step 4) must register before the portal teleports Dana inside, or
+  // the step would never see her at the door.
+  if (player.mode === 'foot' && game.now >= game.doorCooldownUntil) {
+    const door = updateInteriorDoors(game.interiors, player, game.interior);
+    if (door === 'exit') exitInterior();
+    else if (door) enterInterior(door);
   }
   updateCombat(game.combat, game.now);
   // Slow health regen when Dana has been out of trouble for a while.
@@ -279,6 +355,7 @@ game.hudState = () => {
     cash: game.cash,
     health: player.health,
     stars: game.wanted.stars,
+    inside: game.interior,
     objective: {
       ...missionObjectiveText(game.missions),
       dist: missionDistance(game.missions, player),
@@ -300,7 +377,9 @@ window.addEventListener('keydown', (event) => {
   if (event.repeat) return;
   game.keys[event.code] = true;
   if (event.code === 'KeyE' && game.phase === 'play') {
-    if (game.player.mode === 'foot') {
+    if (game.interior) {
+      exitInterior();
+    } else if (game.player.mode === 'foot') {
       const car = nearestStealable(game.player, game.traffic, game.parked);
       if (car) {
         const wasSports = car.isSports === true;
@@ -371,7 +450,7 @@ game.hud.onPlay((continueSave) => {
     game.cash = game.save.cash;
     resetWorld();
   }
-  beginMission(Math.min(game.save.missionIndex, 2));
+  beginMission(Math.min(game.save.missionIndex, 3));
   game.phase = 'play';
   game.hud.feed('Job 1: pick up the package at the docks. Follow the yellow beacon.');
 });
