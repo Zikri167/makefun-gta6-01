@@ -2,7 +2,8 @@
 // plaza at the centre, and a downtown of taller towers near the middle. Everything the
 // game needs to drive, walk and chase through it comes from here: the road graph the
 // traffic follows, the building boxes the player collides with, and the ground texture
-// that paints roads, crosswalks and sand in one draw call.
+// that paints roads, crosswalks and sand in one draw call. The street-lamp head
+// material is returned too, so the dusk lighting can make the lamps glow brighter.
 import * as THREE from 'three';
 import { makeRandom, pick, range, rangeInt, clamp } from './random.js';
 
@@ -236,10 +237,9 @@ export function createCity(scene, seed) {
   const poles = new THREE.InstancedMesh(
     poleGeometry, new THREE.MeshStandardMaterial({ color: 0x2e3438, roughness: 0.6, metalness: 0.6 }), lampSpots.length,
   );
+  const lampHeadMaterial = new THREE.MeshStandardMaterial({ color: 0xffe9a8, emissive: 0xffdf80, emissiveIntensity: 0.9 });
   const headGeometry = new THREE.SphereGeometry(0.28, 8, 6);
-  const heads = new THREE.InstancedMesh(
-    headGeometry, new THREE.MeshStandardMaterial({ color: 0xffe9a8, emissive: 0xffdf80, emissiveIntensity: 0.9 }), lampSpots.length,
-  );
+  const heads = new THREE.InstancedMesh(headGeometry, lampHeadMaterial, lampSpots.length);
   const matrix = new THREE.Matrix4();
   lampSpots.forEach(([x, z], index) => {
     matrix.makeTranslation(x, 0, z);
@@ -273,7 +273,7 @@ export function createCity(scene, seed) {
   });
   group.add(trunks, crowns);
 
-  return { group, nodes, colliders, buildings };
+  return { group, nodes, colliders, buildings, lampHeadMaterial };
 }
 
 // Push a circle (player, car, pedestrian) out of every building box it overlaps.
