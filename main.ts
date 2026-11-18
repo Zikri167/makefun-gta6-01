@@ -6,8 +6,12 @@
 // /output/dossier.json, the summary the judge reads, with the vendored make.fun
 // library. The game itself is an original 3D open world: Solmar Bay, a sun-soaked
 // coastal city to explore on foot and by car, with traffic and pedestrians, cars to
-// steal, a five-star wanted level with police who chase, three story missions, combat,
-// a HUD with a minimap, a start screen and a localStorage save.
+// steal, a five-star wanted level with police who chase, four story missions ending
+// in a dusk finale inside Marlow's office, enterable interiors (office and garage),
+// a dusk time of day, combat, a HUD with a minimap, a start screen and a
+// localStorage save. v3 also fixes the mission geometry: every step position sits
+// on a road or in the park plaza, never inside a block where a building could spawn
+// over the beacon (v2's corner points did exactly that on seed 7).
 //
 // Serve it locally with `node serve.ts`, then open http://localhost:8080.
 // Outside the grader's container, MAKEFUN_OUTPUT_DIR stands in for /output:
