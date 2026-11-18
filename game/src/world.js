@@ -3,6 +3,7 @@
 // one fixed step and returns what happened as bit flags, so the caller can react without the
 // world knowing about screens or sound. Nothing here allocates after createWorld returns.
 import { BLOCK, COIN, FIELD, LEVEL, LIVES, PLAYER, POOL_SIZE } from './config.js';
+import { createWanted, WANTED_HIT } from './wanted.js';
 
 export const KIND_BLOCK = 0;
 export const KIND_COIN = 1;
@@ -10,6 +11,7 @@ export const KIND_COIN = 1;
 export const EVENT_HIT = 1;
 export const EVENT_COIN = 2;
 export const EVENT_OVER = 4;
+export const EVENT_POLICE = 8;
 
 function overlaps(a, b) {
   return a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y;
@@ -22,10 +24,13 @@ export function createWorld(random) {
     items.push({ active: false, kind: KIND_BLOCK, x: 0, y: 0, width: 0, height: 0, speed: 0 });
   }
   const state = { player, items, score: 0, lives: LIVES, level: 1, elapsed: 0, blockTimer: 0, coinTimer: 0 };
+  const wanted = createWanted(random);
+  state.wanted = wanted.state;
 
   function reset() {
     player.x = (FIELD.width - player.width) / 2;
     player.invulnerable = 0;
+    wanted.reset();
     for (const item of items) item.active = false;
     state.score = 0;
     state.lives = LIVES;
@@ -79,6 +84,18 @@ export function createWorld(random) {
 
     player.x = Math.min(FIELD.width - player.width, Math.max(0, player.x + direction * PLAYER.speed * dt));
     if (player.invulnerable > 0) player.invulnerable = Math.max(0, player.invulnerable - dt);
+
+    // A police collision costs a life like a block hit, and raises the wanted level.
+    const wantedFlags = wanted.step(dt, player, harmless);
+    if (!harmless && (wantedFlags & WANTED_HIT)) {
+      state.lives -= 1;
+      player.invulnerable = PLAYER.invulnerable;
+      events |= EVENT_HIT | EVENT_POLICE;
+      if (state.lives === 0) {
+        events |= EVENT_OVER;
+        return events;
+      }
+    }
 
     state.blockTimer -= dt;
     if (state.blockTimer <= 0) {
