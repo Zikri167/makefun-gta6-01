@@ -1,6 +1,7 @@
-// Save: one small localStorage record — cash, which job Dana is on, how many jobs she
-// finished, and the mute setting. Written on every mission payout and every ten
-// seconds of play; a missing or corrupt record just starts a fresh day.
+// Save: one small localStorage record — cash, which job Dana is on (0-3 across the
+// four jobs, SUNDOWN included), how many jobs she finished, and the mute setting.
+// Written on every mission payout and every ten seconds of play; a missing or
+// corrupt record just starts a fresh day.
 const SAVE_KEY = 'solmar-heat-save-v1';
 
 export function defaultSave() {
