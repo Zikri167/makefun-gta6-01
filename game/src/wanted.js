@@ -1,92 +1,108 @@
-// The wanted level and its mini police cars. A small pre-allocated pool of cars spawns at the
-// top of the field and steers toward the player while falling; touching one raises the wanted
-// level by one star (and costs a life, handled by the world), while a quiet stretch lowers it.
-// step() returns bit flags so the world can react without knowing the details.
-import { FIELD, POLICE, WANTED } from './config.js';
+// The wanted level: Solmar PD's attention, from zero to five stars. Crimes add heat,
+// quiet time cools it, and the police on the street always match the stars. Get caught
+// on foot and it is BUSTED; lose all your health and it is WASTED.
+import { createPoliceCar, updatePoliceCar } from './vehicles.js';
 
-export const WANTED_HIT = 1;
-export const WANTED_CHANGED = 2;
+export const MAX_STARS = 5;
+const COOL_AFTER = 8; // quiet seconds before the first star falls
+const COOL_STEP = 9; // seconds between stars after that
+const SPOTTED_RANGE = 65; // a cop this close restarts the cooling clock
 
-function overlapsPolice(car, player) {
-  return car.x < player.x + player.width && car.x + car.width > player.x
-    && car.y < player.y + player.height && car.y + car.height > player.y;
+export function createWanted() {
+  return {
+    stars: 0,
+    lastCrimeAt: -999,
+    nextCoolAt: 0,
+    bustedProgress: 0,
+    police: [],
+  };
 }
 
-export function createWanted(random) {
-  const cars = [];
-  for (let index = 0; index < POLICE.poolSize; index += 1) {
-    cars.push({ active: false, x: 0, y: 0, width: POLICE.width, height: POLICE.height, siren: 0 });
+export function addWanted(wanted, stars, reason, now, onEvent) {
+  const before = wanted.stars;
+  wanted.stars = Math.min(MAX_STARS, wanted.stars + stars);
+  wanted.lastCrimeAt = now;
+  wanted.nextCoolAt = now + COOL_AFTER;
+  if (wanted.stars !== before && onEvent) onEvent(wanted.stars, reason);
+  return wanted.stars;
+}
+
+export function clearWanted(wanted) {
+  wanted.stars = 0;
+  wanted.bustedProgress = 0;
+}
+
+// How many police cars the stars call for. One per star up to three, then one more
+// for the last two, so five stars still runs on this machine.
+export function policeTarget(stars) {
+  return stars === 0 ? 0 : Math.min(1 + stars, 5);
+}
+
+function syncPolice(wanted, scene, city, random, playerPos) {
+  const target = policeTarget(wanted.stars);
+  while (wanted.police.length < target) {
+    wanted.police.push(createPoliceCar(scene, city.nodes, random, playerPos));
   }
-  const state = { stars: 0, decayTimer: 0, spawnTimer: POLICE.spawnBase, invulnTimer: 0, cars };
-
-  function reset() {
-    state.stars = 0;
-    state.decayTimer = 0;
-    state.spawnTimer = POLICE.spawnBase;
-    state.invulnTimer = 0;
-    for (const car of cars) car.active = false;
+  while (wanted.police.length > target) {
+    const car = wanted.police.pop();
+    scene.remove(car.mesh);
   }
+}
 
-  function spawnInterval() {
-    return Math.max(POLICE.spawnMin, POLICE.spawnBase - POLICE.spawnStep * state.stars);
-  }
-
-  function spawnCar() {
-    for (const car of cars) {
-      if (car.active) continue;
-      car.active = true;
-      car.x = random() * (FIELD.width - car.width);
-      car.y = -car.height;
-      car.siren = 0;
-      return;
-    }
-  }
-
-  function step(dt, player, harmless) {
-    let flags = 0;
-    if (state.invulnTimer > 0) state.invulnTimer = Math.max(0, state.invulnTimer - dt);
-
-    if (state.stars > 0) {
-      state.decayTimer -= dt;
-      if (state.decayTimer <= 0) {
-        state.stars -= 1;
-        state.decayTimer = state.stars > 0 ? WANTED.decaySeconds : 0;
-        flags |= WANTED_CHANGED;
+export function updateWanted(wanted, scene, city, random, player, world, now, dt) {
+  syncPolice(wanted, scene, city, random, player.pos);
+  let closest = Infinity;
+  for (const car of wanted.police) {
+    const dist = updatePoliceCar(car, player.pos, player.mode === 'drive', city.colliders, city.nodes, random, dt, wanted.stars);
+    closest = Math.min(closest, dist);
+    if (player.mode === 'drive') {
+      // A police ram at speed hurts the car and the driver — at most once every
+      // two seconds, so a long contact does not grind the car to a halt.
+      const dx = car.mesh.position.x - player.pos.x;
+      const dz = car.mesh.position.z - player.pos.z;
+      if (Math.hypot(dx, dz) < 4.6 && Math.abs(car.speed) > 4 && now - car.lastRamAt > 2) {
+        car.lastRamAt = now;
+        player.carSpeed *= 0.65;
+        hurtPlayer(player, 6, now, world);
+        if (world.onCrash) world.onCrash(6);
       }
     }
-
-    state.spawnTimer -= dt;
-    if (state.spawnTimer <= 0) {
-      spawnCar();
-      state.spawnTimer = spawnInterval();
-    }
-
-    const playerCentre = player.x + player.width / 2;
-    for (const car of cars) {
-      if (!car.active) continue;
-      const carCentre = car.x + car.width / 2;
-      const gap = playerCentre - carCentre;
-      const steer = gap > 4 ? 1 : gap < -4 ? -1 : 0;
-      car.x = Math.min(
-        FIELD.width - car.width,
-        Math.max(0, car.x + steer * (POLICE.chaseSpeed + POLICE.chasePerStar * state.stars) * dt),
-      );
-      car.y += (POLICE.fallSpeed + POLICE.fallPerStar * state.stars) * dt;
-      car.siren += dt;
-      if (car.y > FIELD.height) {
-        car.active = false;
-        continue;
-      }
-      if (harmless || state.invulnTimer > 0 || !overlapsPolice(car, player)) continue;
-      car.active = false;
-      state.stars = Math.min(WANTED.maxStars, state.stars + 1);
-      state.decayTimer = WANTED.decaySeconds;
-      state.invulnTimer = WANTED.invulnSeconds;
-      flags |= WANTED_HIT | WANTED_CHANGED;
-    }
-    return flags;
   }
+  // Cooling only starts once the cops lose sight of Dana: a police car nearby
+  // restarts the clock, and each star then takes its own quiet stretch to fall.
+  if (wanted.stars > 0) {
+    if (closest < SPOTTED_RANGE) {
+      wanted.nextCoolAt = now + COOL_AFTER;
+    } else if (now >= wanted.nextCoolAt) {
+      wanted.stars -= 1;
+      wanted.nextCoolAt = now + COOL_STEP;
+      if (world.onEvent) world.onEvent(wanted.stars, wanted.stars === 0 ? 'The heat is off.' : 'Heat cooling down.');
+    }
+  }
+  // On foot, a cop that reaches Dana starts the bust. Break contact to shake it.
+  if (player.mode === 'foot' && wanted.stars > 0) {
+    if (closest < 3.2) {
+      wanted.bustedProgress += dt / 1.6;
+      if (wanted.bustedProgress >= 1) {
+        wanted.bustedProgress = 0;
+        if (world.onBusted) world.onBusted();
+      }
+    } else {
+      wanted.bustedProgress = Math.max(0, wanted.bustedProgress - dt / 2);
+    }
+  } else {
+    wanted.bustedProgress = Math.max(0, wanted.bustedProgress - dt / 2);
+  }
+  return closest;
+}
 
-  reset();
-  return { state, reset, step };
+export function hurtPlayer(player, amount, now, world) {
+  if (now - player.lastHurtAt < 0.5) return;
+  player.lastHurtAt = now;
+  player.health = Math.max(0, player.health - amount);
+  if (player.health <= 0 && world.onWasted) world.onWasted();
+}
+
+export function healPlayer(player, amount) {
+  player.health = Math.min(100, player.health + amount);
 }
