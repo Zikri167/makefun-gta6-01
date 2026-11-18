@@ -1,7 +1,8 @@
 // Combat: a simple hitscan pistol for on-foot Dana. Click fires a ray from the camera
 // through the crosshair; a pedestrian hit knocks them down and raises heat, a car hit
 // dents it, and a short-lived tracer shows the shot. No ammo to manage — the cooldown
-// is the limiter.
+// is the limiter. Shots only ever meet street targets: pedestrians and police never
+// follow Dana indoors, so the ray finds nothing inside an interior.
 import * as THREE from 'three';
 import { addWanted } from './wanted.js';
 import { knockDownPedestrian, scarePedestrians, getCorners } from './pedestrians.js';
