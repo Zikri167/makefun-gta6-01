@@ -2,6 +2,7 @@
 // to be stolen, and the police who chase the player. Traffic cars follow edges between
 // intersections in the right-hand lane, slow for the car ahead, and respawn far away
 // when the player leaves them behind. Police steer straight at the player and ram.
+// Headlights and tail lights are emissive, so the cars still read at dusk.
 import * as THREE from 'three';
 import { pick, range, clamp } from './random.js';
 import { nodeByKey, nodeKey, nearestNode, resolveBuildingCollision, ROAD_HALF } from './city.js';
