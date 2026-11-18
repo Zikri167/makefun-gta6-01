@@ -40,6 +40,27 @@ export const COIN = {
 /** Seconds of play per level, and the last level: speeds and spawn rates stop growing there. */
 export const LEVEL = { seconds: 12, max: 12 };
 
+/** Wanted level: stars 0-5, one star per police collision, one star lost per quiet stretch. */
+export const WANTED = {
+  maxStars: 5,
+  decaySeconds: 12,
+  invulnSeconds: 1.2,
+};
+
+/** Mini police cars: a small pool that spawns at the top and steers toward the player. */
+export const POLICE = {
+  poolSize: 4,
+  width: 44,
+  height: 22,
+  fallSpeed: 190,
+  fallPerStar: 15,
+  chaseSpeed: 140,
+  chasePerStar: 12,
+  spawnBase: 5.5,
+  spawnStep: 0.7,
+  spawnMin: 1.6,
+};
+
 /** How many falling things can exist at once; the pool is allocated once, at boot. */
 export const POOL_SIZE = 64;
 
@@ -50,6 +71,10 @@ export const PALETTE = {
   player: '#4fc3f7',
   block: '#e5534b',
   coin: '#f2c94c',
+  police: '#2e3a52',
+  sirenRed: '#ff5252',
+  sirenBlue: '#448aff',
+  starGold: '#ffd54f',
   panel: '#252b38',
   text: '#eef1f5',
   muted: '#8b93a3',
