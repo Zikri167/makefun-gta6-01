@@ -58,6 +58,7 @@ function runGame() {
   let best = readBest();
   let accumulator = 0;
   let last = performance.now();
+  let prevStars = 0;
 
   // Screen readers (and anyone watching the page's text) hear the screen changes and each hit.
   function announce(message) {
@@ -67,6 +68,7 @@ function runGame() {
   function startGame() {
     world.reset();
     accumulator = 0;
+    prevStars = 0;
     screen = SCREEN_PLAY;
     announce(`Playing. ${LIVES} lives.`);
   }
@@ -100,6 +102,11 @@ function runGame() {
     const events = world.step(STEP, input.direction(), false);
     if (events & EVENT_OVER) endGame();
     else if (events & EVENT_HIT) announce(world.state.lives === 1 ? 'Hit. 1 life left.' : `Hit. ${world.state.lives} lives left.`);
+    // The wanted level is announced whenever it moves, up or down.
+    if (world.state.wanted.stars !== prevStars) {
+      prevStars = world.state.wanted.stars;
+      announce(prevStars === 0 ? 'Wanted level cleared.' : `Wanted level ${prevStars} star${prevStars === 1 ? '' : 's'}.`);
+    }
   }
 
   function frame(now) {
