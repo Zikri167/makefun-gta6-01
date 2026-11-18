@@ -3,17 +3,131 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Block Dodger</title>
+<title>Solmar Heat — Open-World Crime</title>
 <style>
-  html, body { margin: 0; height: 100%; overflow: hidden; background: #11141b; }
-  #game { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
-  /* Read aloud, never shown: the status line screen readers announce. */
-  #status { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  :root {
+    --ink: #f5efe2;
+    --muted: #c9c2b0;
+    --accent: #ffb02e;
+    --danger: #ff3b30;
+    --panel: rgba(12, 16, 24, 0.72);
+    --line: rgba(245, 239, 226, 0.28);
+    font: 14px system-ui, -apple-system, sans-serif;
+    color: var(--ink);
+  }
+  * { box-sizing: border-box; }
+  html, body, #game { width: 100%; height: 100%; margin: 0; overflow: hidden; background: #87b7d9; }
+  #game canvas { position: fixed; inset: 0; display: block; }
+  #hud { position: fixed; inset: 0; pointer-events: none; }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; }
+  #stats { position: absolute; top: 14px; left: 14px; padding: 10px 14px; min-width: 210px; }
+  #cash { font: 700 26px ui-monospace, monospace; color: var(--accent); }
+  #cash small { font-size: 12px; color: var(--muted); display: block; letter-spacing: .14em; }
+  #health-row { margin-top: 7px; display: flex; align-items: center; gap: 8px; }
+  #health-bar { flex: 1; height: 10px; background: #00000088; border-radius: 5px; overflow: hidden; }
+  #health-fill { height: 100%; width: 100%; background: #57d977; }
+  #health-num { font: 700 13px ui-monospace, monospace; }
+  #wanted { position: absolute; top: 14px; right: 14px; padding: 9px 14px; text-align: right; }
+  #wanted .stars { font-size: 24px; letter-spacing: 3px; color: var(--accent); text-shadow: 0 0 8px #000; }
+  #wanted .stars .off { color: #ffffff33; }
+  #wanted-label { font-size: 11px; letter-spacing: .2em; color: var(--muted); }
+  #objective { position: absolute; top: 14px; left: 50%; transform: translateX(-50%); padding: 9px 18px; text-align: center; max-width: 46vw; }
+  #objective-title { font-weight: 700; letter-spacing: .12em; color: var(--accent); }
+  #objective-text { color: var(--ink); margin-top: 2px; }
+  #objective-dist { color: var(--muted); font: 12px ui-monospace, monospace; margin-top: 2px; }
+  #minimap-wrap { position: absolute; right: 14px; bottom: 14px; padding: 6px; }
+  #minimap { display: block; width: 168px; height: 168px; border-radius: 4px; }
+  #speed { position: absolute; right: 14px; bottom: 198px; padding: 6px 12px; text-align: right; }
+  #speed-num { font: 700 30px ui-monospace, monospace; }
+  #speed-unit { color: var(--muted); font-size: 11px; letter-spacing: .15em; }
+  #hint { position: absolute; left: 14px; bottom: 14px; padding: 8px 12px; color: var(--muted); line-height: 1.65; }
+  #hint b { color: var(--ink); }
+  #feed { position: absolute; left: 14px; top: 120px; max-width: 340px; }
+  #feed div { margin-top: 5px; padding: 6px 10px; background: var(--panel); border-left: 3px solid var(--accent); }
+  #crosshair { position: absolute; left: 50%; top: 50%; width: 4px; height: 4px; margin: -2px; background: var(--ink); border-radius: 50%; box-shadow: 0 0 0 1px #0008; display: none; }
+  #banner { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; pointer-events: none; }
+  #banner[hidden] { display: none; }
+  #banner-title { font: 800 52px system-ui, sans-serif; letter-spacing: .14em; text-shadow: 0 3px 18px #000; }
+  #banner-sub { font-size: 17px; color: var(--muted); text-shadow: 0 2px 8px #000; margin-top: 6px; }
+  .overlay { position: fixed; inset: 0; display: grid; place-items: center; background: linear-gradient(180deg, #0a1420cc, #1a0f08e6); pointer-events: auto; z-index: 5; }
+  .overlay[hidden] { display: none; }
+  .card { width: min(620px, 92vw); padding: 34px 38px; background: #10161fd9; border: 1px solid var(--accent); border-radius: 10px; }
+  .card h1 { margin: 0; font-size: 44px; letter-spacing: .1em; color: var(--accent); }
+  .card h1 span { color: var(--ink); }
+  .card h2 { margin: 0 0 8px; font-size: 30px; letter-spacing: .08em; }
+  .card p { color: var(--muted); line-height: 1.7; }
+  .card .story { color: var(--ink); }
+  .keys { columns: 2; color: var(--muted); line-height: 1.9; padding-left: 18px; }
+  .keys b { color: var(--ink); }
+  button { padding: 12px 26px; border: 0; border-radius: 6px; background: var(--accent); color: #14100a; font: 700 16px system-ui, sans-serif; letter-spacing: .08em; cursor: pointer; margin-top: 14px; }
+  button.ghost { background: transparent; color: var(--ink); border: 1px solid var(--line); margin-left: 10px; }
+  #save-note { margin-top: 12px; color: var(--muted); font-size: 12px; }
 </style>
 </head>
 <body>
-<canvas id="game" aria-label="Block Dodger: move the paddle left and right to dodge falling blocks and catch coins"></canvas>
-<p id="status" role="status" aria-live="polite"></p>
+<div id="game"></div>
+<div id="hud">
+  <div id="stats" class="panel">
+    <div id="cash"><small>SOLMAR BANK</small>$0</div>
+    <div id="health-row"><span>HP</span><div id="health-bar"><div id="health-fill"></div></div><span id="health-num">100</span></div>
+  </div>
+  <div id="wanted" class="panel">
+    <div id="wanted-label">WANTED</div>
+    <div class="stars" id="stars"></div>
+  </div>
+  <div id="objective" class="panel">
+    <div id="objective-title">FREE ROAM</div>
+    <div id="objective-text">Explore Solmar. Steal a car with E. Start a mission at the yellow marker.</div>
+    <div id="objective-dist"></div>
+  </div>
+  <div id="minimap-wrap" class="panel"><canvas id="minimap" width="336" height="336"></canvas></div>
+  <div id="speed" class="panel"><span id="speed-num">0</span><div id="speed-unit">KM/H · <span id="gear">PARK</span></div></div>
+  <div id="hint" class="panel"><b>WASD</b> move / drive · <b>Mouse drag</b> camera · <b>E</b> steal / exit car<br><b>Click</b> shoot · <b>Shift</b> run · <b>P</b> pause · <b>M</b> mute</div>
+  <div id="feed"></div>
+  <div id="crosshair"></div>
+  <div id="banner" hidden><div><div id="banner-title"></div><div id="banner-sub"></div></div></div>
+</div>
+
+<div id="start-screen" class="overlay">
+  <section class="card">
+    <h1>SOLMAR <span>HEAT</span></h1>
+    <p class="story">Solmar Bay. Sun, salt, and bad decisions. Dana Vega owes loan shark Marlow
+    $2,000 by sundown — and the only way to pay is to run jobs for Ilsa at the harbor.
+    Steal cars, dodge the Solmar PD, and finish all three jobs before the city eats you.</p>
+    <p>An original open-world crime game: a city to explore on foot and by car, traffic and
+    pedestrians, cars to steal, a wanted level with police who chase you, three story missions,
+    combat, a minimap, and a save that remembers your cash.</p>
+    <ul class="keys">
+      <li><b>WASD</b> — move / drive</li>
+      <li><b>Mouse drag</b> — camera</li>
+      <li><b>E</b> — steal / exit car</li>
+      <li><b>Click</b> — shoot (on foot)</li>
+      <li><b>Shift</b> — run</li>
+      <li><b>P</b> — pause &nbsp; <b>M</b> — mute</li>
+    </ul>
+    <button id="play-btn">START ENGINE</button><button id="continue-btn" class="ghost" hidden>CONTINUE — $0 · MISSION 1</button>
+    <div id="save-note">Progress saves automatically to this browser.</div>
+  </section>
+</div>
+
+<div id="pause-screen" class="overlay" hidden>
+  <section class="card">
+    <h2>PAUSED</h2>
+    <p>Solmar waits for no one — except right now.</p>
+    <button id="resume-btn">RESUME</button><button id="restart-btn" class="ghost">RESTART DAY</button>
+    <div id="save-note">Cash, missions and stats are saved automatically.</div>
+  </section>
+</div>
+
+<div id="end-screen" class="overlay" hidden>
+  <section class="card">
+    <h2 id="end-title">BUSTED</h2>
+    <p id="end-text"></p>
+    <button id="retry-btn">BACK ON THE STREETS</button>
+  </section>
+</div>
+
+<script type="importmap">{"imports":{"three":"./vendor/three/three.module.min.js"}}</script>
 <script type="module" src="./src/main.js"></script>
 </body>
 </html>
