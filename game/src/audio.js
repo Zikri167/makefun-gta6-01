@@ -132,11 +132,24 @@ export function createAudio() {
       blip(880, 0.12, 0.25);
       blip(1318, 0.18, 0.25, 0.09);
     },
+    // A low wooden knock for stepping through a door, in or out.
+    door() {
+      blip(196, 0.14, 0.28);
+      blip(147, 0.2, 0.22, 0.1);
+    },
     missionDone() {
       blip(523, 0.16, 0.3);
       blip(659, 0.16, 0.3, 0.12);
       blip(784, 0.22, 0.3, 0.24);
       blip(1046, 0.34, 0.3, 0.36);
+    },
+    // The SUNDOWN finale: the mission jingle, stretched into a slow major run.
+    finale() {
+      blip(523, 0.2, 0.3);
+      blip(659, 0.2, 0.3, 0.16);
+      blip(784, 0.2, 0.3, 0.32);
+      blip(1046, 0.3, 0.3, 0.48);
+      blip(1318, 0.55, 0.3, 0.66);
     },
     busted() {
       blip(220, 0.4, 0.3);
