@@ -1,10 +1,18 @@
-// Ilsa's jobs: three story missions, each a chain of steps (go somewhere, pick
+// Ilsa's jobs: four story missions, each a chain of steps (go somewhere, pick
 // something up, deliver it, lose the cops). A glowing beacon marks the current step
 // in the world and on the minimap, and finishing a job pays cash and unlocks the next.
+// The finale, SUNDOWN, ends inside Marlow's office: its last step is a 'goto' at the
+// office's interior coordinates, reached by walking through the downtown door portal.
+//
+// Every step position sits ON A ROAD or in the park plaza — never in a block
+// interior, where a building could spawn over the beacon and shove Dana out of the
+// radius before the step can register (v2's corner points sat inside buildings).
 import * as THREE from 'three';
 
-// Mission scripts. Positions are world metres: the docks sit south-west, the garage
-// north-east, Marlow's office downtown, the harbor on the south beach road.
+// Mission scripts. Positions are world metres: the docks sit on the south-west
+// avenue, the garage on the north-east avenue, Marlow's office downtown, the harbor
+// on the south beach road. The office interior lives far from the city, near
+// x=+1000 (see interiors.js).
 export const MISSIONS = [
   {
     id: 'pickup',
@@ -13,9 +21,9 @@ export const MISSIONS = [
     brief: 'A package is waiting at the docks. Grab it and bring it to the garage — no questions, no cops.',
     reward: 150,
     steps: [
-      { type: 'goto', pos: { x: -125, z: 125 }, radius: 6, text: 'Go to the docks — the package is at the south-west pier' },
-      { type: 'pickup', pos: { x: -125, z: 125 }, radius: 6, text: 'Pick up the package (walk into the marker)' },
-      { type: 'goto', pos: { x: 125, z: -125 }, radius: 7, text: 'Deliver it to the garage, north-east corner' },
+      { type: 'goto', pos: { x: -150, z: 125 }, radius: 6, text: 'Go to the docks — the package is at the south-west pier' },
+      { type: 'pickup', pos: { x: -150, z: 125 }, radius: 6, text: 'Pick up the package (walk into the marker)' },
+      { type: 'goto', pos: { x: 150, z: -125 }, radius: 7, text: 'Deliver it to the garage, north-east corner' },
     ],
   },
   {
@@ -27,7 +35,7 @@ export const MISSIONS = [
     steps: [
       { type: 'steal', pos: { x: 0, z: -100 }, radius: 6, text: 'Steal the orange Comet GT on Marina Avenue (press E beside it)' },
       { type: 'escape', pos: { x: 0, z: -100 }, radius: 6, text: 'Lose the cops — get your wanted level to zero' },
-      { type: 'goto', pos: { x: 125, z: -125 }, radius: 7, text: 'Deliver the Comet GT to the garage' },
+      { type: 'goto', pos: { x: 150, z: -125 }, radius: 7, text: 'Deliver the Comet GT to the garage' },
     ],
   },
   {
@@ -38,9 +46,24 @@ export const MISSIONS = [
     reward: 500,
     timeLimit: 90,
     steps: [
-      { type: 'goto', pos: { x: -125, z: -125 }, radius: 7, text: 'Drop 1/3 — the north-west corner' },
-      { type: 'goto', pos: { x: 125, z: 125 }, radius: 7, text: 'Drop 2/3 — the beachfront, south-east' },
+      { type: 'goto', pos: { x: -150, z: -125 }, radius: 7, text: 'Drop 1/3 — the north-west corner' },
+      { type: 'goto', pos: { x: 150, z: 125 }, radius: 7, text: 'Drop 2/3 — the beachfront, south-east' },
       { type: 'goto', pos: { x: 0, z: 0 }, radius: 8, text: 'Final drop — the park plaza, city centre' },
+    ],
+  },
+  {
+    id: 'sundown',
+    title: 'JOB 4 — SUNDOWN',
+    giver: 'Ilsa at the harbor',
+    brief: 'The last job. Marlow’s $2,000 is waiting at the harbor: collect it, make two drops across town, then walk it into his downtown office before the sun is gone. The PD is already out.',
+    reward: 500,
+    timeLimit: 150,
+    steps: [
+      { type: 'pickup', pos: { x: -150, z: 125 }, radius: 6, text: 'Pick up Marlow’s $2,000 at the harbor (walk into the marker)' },
+      { type: 'goto', pos: { x: -150, z: -125 }, radius: 7, text: 'Drop 1/2 — the north-west corner' },
+      { type: 'goto', pos: { x: 150, z: 125 }, radius: 7, text: 'Drop 2/2 — the beachfront, south-east' },
+      { type: 'goto', pos: { x: 57, z: 0 }, radius: 4, text: 'Enter Marlow’s office downtown — walk into the glowing doorway' },
+      { type: 'goto', pos: { x: 1000, z: -4.8 }, radius: 3, text: 'Hand Marlow the money — walk to the desk' },
     ],
   },
 ];
@@ -127,7 +150,7 @@ export function updateMissions(missions, player, wanted, events, now, dt) {
     if (missions.timeLeft <= 0) {
       missions.started = false;
       missions.stepIndex = 0;
-      return 'TIME UP — the Harbor Run failed. Ilsa is not happy. Try again.';
+      return `TIME UP — ${mission.title} failed. Out of time. Try again.`;
     }
   }
   const dist = Math.hypot(player.pos.x - step.pos.x, player.pos.z - step.pos.z);
