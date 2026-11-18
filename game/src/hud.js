@@ -1,6 +1,8 @@
 // The HUD: cash and health, wanted stars, the mission objective, speed, the feed of
 // what just happened, and the minimap — a 2D canvas that draws the same road grid the
-// city is built on, with the player, traffic, police and the job marker on it.
+// city is built on, with the player, traffic, police and the job marker on it. While
+// Dana is inside a building the minimap keeps its city frame: the player arrow is
+// clamped to the map edge and the objective carries an INSIDE tag.
 import { GRID, gridCoord, WORLD_HALF, PITCH, ROAD_HALF } from './city.js';
 
 function el(id) {
@@ -14,6 +16,7 @@ export function createHud() {
   const scale = size / (WORLD_HALF * 2 + 20);
   const toMapX = (x) => (x + WORLD_HALF + 10) * scale;
   const toMapY = (z) => (z + WORLD_HALF + 10) * scale;
+  const clampMap = (v) => Math.max(6, Math.min(size - 6, v));
   let frame = 0;
   let bannerTimer = null;
 
@@ -49,12 +52,13 @@ export function createHud() {
     ctx.beginPath();
     ctx.arc(toMapX(0), toMapY(0), 13 * scale, 0, Math.PI * 2);
     ctx.fill();
-    // Mission marker, pulsing.
+    // Mission marker, pulsing. Interior steps live off the map, so the marker is
+    // clamped to the edge instead of vanishing.
     if (state.marker) {
       const pulse = 1 + Math.sin(state.now * 5) * 0.18;
       ctx.fillStyle = '#ffc21e';
       ctx.save();
-      ctx.translate(toMapX(state.marker.x), toMapY(state.marker.z));
+      ctx.translate(clampMap(toMapX(state.marker.x)), clampMap(toMapY(state.marker.z)));
       ctx.rotate(Math.PI / 4);
       const s = 7 * pulse;
       ctx.fillRect(-s, -s, s * 2, s * 2);
@@ -73,9 +77,10 @@ export function createHud() {
       ctx.arc(toMapX(car.x), toMapY(car.z), 4, 0, Math.PI * 2);
       ctx.fill();
     }
-    // The player: a white arrow pointing where she faces.
+    // The player: a white arrow pointing where she faces, clamped to the map
+    // (indoors she is off the city grid, so the arrow parks at the edge).
     ctx.save();
-    ctx.translate(toMapX(state.player.x), toMapY(state.player.z));
+    ctx.translate(clampMap(toMapX(state.player.x)), clampMap(toMapY(state.player.z)));
     ctx.rotate(state.player.heading);
     ctx.fillStyle = '#ffffff';
     ctx.beginPath();
@@ -88,6 +93,11 @@ export function createHud() {
     ctx.fillStyle = '#c9c2b0';
     ctx.font = 'bold 13px system-ui, sans-serif';
     ctx.fillText('N', 8, 20);
+    if (state.inside) {
+      ctx.fillStyle = '#ffb02e';
+      ctx.font = 'bold 13px system-ui, sans-serif';
+      ctx.fillText('INSIDE', 8, size - 10);
+    }
   }
 
   function starsText(stars) {
@@ -127,8 +137,8 @@ export function createHud() {
       el('objective-title').textContent = state.objective.title;
       el('objective-text').textContent = state.objective.text;
       el('objective-dist').textContent = state.objective.dist === null
-        ? ''
-        : `${state.objective.dist} m${state.timeLeft ? ` · ${Math.ceil(state.timeLeft)}s left` : ''}`;
+        ? (state.inside ? 'INSIDE' : '')
+        : `${state.objective.dist} m${state.timeLeft ? ` · ${Math.ceil(state.timeLeft)}s left` : ''}${state.inside ? ' · INSIDE' : ''}`;
       el('speed-num').textContent = String(Math.round(state.speedKmh));
       el('gear').textContent = state.driving ? (state.speedKmh > 1 ? 'DRIVE' : state.speedKmh < -1 ? 'REVERSE' : 'DRIVE') : 'ON FOOT';
       el('crosshair').style.display = state.driving ? 'none' : 'block';
@@ -140,7 +150,7 @@ export function createHud() {
       const continueBtn = el('continue-btn');
       if (save && (save.cash > 0 || save.jobsDone > 0 || save.missionIndex > 0)) {
         continueBtn.hidden = false;
-        continueBtn.textContent = `CONTINUE — $${save.cash} · JOB ${save.missionIndex + 1}`;
+        continueBtn.textContent = `CONTINUE — $${save.cash} · JOB ${Math.min(save.missionIndex + 1, 4)}`;
       } else {
         continueBtn.hidden = true;
       }
