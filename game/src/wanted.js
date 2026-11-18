@@ -1,6 +1,8 @@
 // The wanted level: Solmar PD's attention, from zero to five stars. Crimes add heat,
 // quiet time cools it, and the police on the street always match the stars. Get caught
-// on foot and it is BUSTED; lose all your health and it is WASTED.
+// on foot and it is BUSTED; lose all your health and it is WASTED. Ducking inside a
+// building shelters Dana: the cops wait on the street, they cannot follow her in,
+// and the heat cools while she is out of sight.
 import { createPoliceCar, updatePoliceCar } from './vehicles.js';
 
 export const MAX_STARS = 5;
@@ -50,21 +52,27 @@ function syncPolice(wanted, scene, city, random, playerPos) {
 }
 
 export function updateWanted(wanted, scene, city, random, player, world, now, dt) {
-  syncPolice(wanted, scene, city, random, player.pos);
+  // Sheltered indoors, the PD cannot reach Dana: the cars hold their positions
+  // outside and the heat cools as if she vanished. closest stays Infinity, so
+  // the cooling branch below runs and no bust can start.
+  const sheltered = Boolean(world.interior);
   let closest = Infinity;
-  for (const car of wanted.police) {
-    const dist = updatePoliceCar(car, player.pos, player.mode === 'drive', city.colliders, city.nodes, random, dt, wanted.stars);
-    closest = Math.min(closest, dist);
-    if (player.mode === 'drive') {
-      // A police ram at speed hurts the car and the driver — at most once every
-      // two seconds, so a long contact does not grind the car to a halt.
-      const dx = car.mesh.position.x - player.pos.x;
-      const dz = car.mesh.position.z - player.pos.z;
-      if (Math.hypot(dx, dz) < 4.6 && Math.abs(car.speed) > 4 && now - car.lastRamAt > 2) {
-        car.lastRamAt = now;
-        player.carSpeed *= 0.65;
-        hurtPlayer(player, 6, now, world);
-        if (world.onCrash) world.onCrash(6);
+  if (!sheltered) {
+    syncPolice(wanted, scene, city, random, player.pos);
+    for (const car of wanted.police) {
+      const dist = updatePoliceCar(car, player.pos, player.mode === 'drive', city.colliders, city.nodes, random, dt, wanted.stars);
+      closest = Math.min(closest, dist);
+      if (player.mode === 'drive') {
+        // A police ram at speed hurts the car and the driver — at most once every
+        // two seconds, so a long contact does not grind the car to a halt.
+        const dx = car.mesh.position.x - player.pos.x;
+        const dz = car.mesh.position.z - player.pos.z;
+        if (Math.hypot(dx, dz) < 4.6 && Math.abs(car.speed) > 4 && now - car.lastRamAt > 2) {
+          car.lastRamAt = now;
+          player.carSpeed *= 0.65;
+          hurtPlayer(player, 6, now, world);
+          if (world.onCrash) world.onCrash(6);
+        }
       }
     }
   }
@@ -80,7 +88,7 @@ export function updateWanted(wanted, scene, city, random, player, world, now, dt
     }
   }
   // On foot, a cop that reaches Dana starts the bust. Break contact to shake it.
-  if (player.mode === 'foot' && wanted.stars > 0) {
+  if (player.mode === 'foot' && wanted.stars > 0 && !sheltered) {
     if (closest < 3.2) {
       wanted.bustedProgress += dt / 1.6;
       if (wanted.bustedProgress >= 1) {
