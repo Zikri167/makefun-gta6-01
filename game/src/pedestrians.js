@@ -1,6 +1,7 @@
 // Pedestrians: Solmar's foot traffic. They stroll the sidewalks from one block corner
 // to the next, and they run when a car bears down on them or a shot goes off. Cheap by
 // design: shared geometries, a handful of shirt colours, and a simple waypoint walk.
+// They never leave the street grid — nobody follows Dana into an interior.
 import * as THREE from 'three';
 import { pick, range } from './random.js';
 import { GRID, gridCoord, ROAD_HALF, BLOCK } from './city.js';
