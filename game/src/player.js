@@ -1,7 +1,9 @@
 // Dana Vega, on foot and behind the wheel. On foot she walks and runs relative to the
 // camera with a dragged orbit view; in a car she gets arcade handling (accelerate,
 // brake/reverse, speed-sensitive steering) and a chase camera that settles behind the
-// car. E steals the nearest car or steps out of the one she is driving.
+// car. E steals the nearest car or steps out of the one she is driving. Indoors, the
+// same walk code runs against the room's own colliders and bounds (world.roomBounds /
+// world.activeColliders), so interiors need no second movement system.
 import * as THREE from 'three';
 import { clamp, lerp } from './random.js';
 import { resolveBuildingCollision, WORLD_HALF } from './city.js';
@@ -115,7 +117,7 @@ export function exitCar(player, parked) {
   parked.push(car);
 }
 
-function stepFoot(player, keys, colliders, dt) {
+function stepFoot(player, keys, colliders, bounds, dt) {
   const forward = { x: -Math.sin(player.camYaw), z: -Math.cos(player.camYaw) };
   const right = { x: -forward.z, z: forward.x };
   let mx = 0;
@@ -138,8 +140,13 @@ function stepFoot(player, keys, colliders, dt) {
     player.yaw += clamp(diff, -10 * dt, 10 * dt);
   }
   resolveBuildingCollision(colliders, player.pos, 0.5);
-  player.pos.x = clamp(player.pos.x, -WORLD_HALF + 2, WORLD_HALF + 2);
-  player.pos.z = clamp(player.pos.z, -WORLD_HALF + 2, WORLD_HALF + 2);
+  if (bounds) {
+    player.pos.x = clamp(player.pos.x, bounds.minX, bounds.maxX);
+    player.pos.z = clamp(player.pos.z, bounds.minZ, bounds.maxZ);
+  } else {
+    player.pos.x = clamp(player.pos.x, -WORLD_HALF + 2, WORLD_HALF + 2);
+    player.pos.z = clamp(player.pos.z, -WORLD_HALF + 2, WORLD_HALF + 2);
+  }
   player.mesh.position.copy(player.pos);
   player.mesh.rotation.y = player.yaw;
   // Walk bob.
@@ -193,7 +200,7 @@ function stepDrive(player, keys, world, dt) {
 
 export function updatePlayer(player, keys, world, dt) {
   if (player.mode === 'drive') return stepDrive(player, keys, world, dt);
-  stepFoot(player, keys, world.city.colliders, dt);
+  stepFoot(player, keys, world.activeColliders ?? world.city.colliders, world.roomBounds ?? null, dt);
   return { forward: null, speed: player.footSpeed };
 }
 
